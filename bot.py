@@ -7,7 +7,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from huggingface_hub import HfApi
 
 # ---------------------------------------------------------
-# 1. LOGLAMA SİSTEMİ (Operasyon Takibi)
+# 1. LOGLAMA SİSTEMİ
 # ---------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -18,61 +18,53 @@ logging.basicConfig(
 # ---------------------------------------------------------
 # 2. YAPILANDIRMA (Config)
 # ---------------------------------------------------------
-# Senin verdiğin TR Proxy adresi
+# Paylaşılan Türk Proxy'si ve Tokenlar
 FIXED_PROXY = "http://78.188.230.81:3310" 
-
-# GitHub Secrets ve Inputs üzerinden gelen veriler
 HF_TOKEN = os.getenv("HF_TOKEN", "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")
 REPO_ID = "Enmpoy/allmoviesornimetr"
 ANIME_URL = os.getenv("ANIME_URL")
 START_EP = int(os.getenv("START_EP", 1))
 END_EP = int(os.getenv("END_EP", 1))
 
+# İnsansı Kimlik Bilgisi (Bağlantı kopmalarını önler)
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+
 # ---------------------------------------------------------
-# 3. HAYALET TARAYICI MODÜLÜ (Deep-Scan Hazır)
+# 3. ANALİZ MOTORU (Deep-Scan & Proxy Ready)
 # ---------------------------------------------------------
-class StealthBrowser:
-    @staticmethod
-    def initialize():
-        logging.info("🕵️ Tarayıcı hazırlanıyor. Proxy ve Sürüm eşitleme aktif...")
+class AnimeBot:
+    def __init__(self):
+        logging.info("🕵️ Bot hazırlanıyor. Proxy ve Bağlantı Koruma Modülü aktif...")
+        self.driver = self._init_driver()
+        self.api = HfApi()
+
+    def _init_driver(self):
         chrome_ver = None
         try:
-            # GitHub sunucusundaki Chrome sürümünü (145/146) tespit et
+            # Sürüm hatasını (145/146) engellemek için sistem kontrolü
             out = subprocess.check_output(['google-chrome', '--version']).decode('utf-8')
             chrome_ver = int(out.split()[2].split('.')[0])
-            logging.info(f"🌐 Sistem Chrome Sürümü: {chrome_ver}")
         except: pass
 
         opts = uc.ChromeOptions()
-        opts.add_argument('--headless') # Görünmez mod
+        opts.add_argument('--headless')
         opts.add_argument('--no-sandbox')
         opts.add_argument('--disable-dev-shm-usage')
         opts.add_argument('--window-size=1920,1080')
-        
-        # PROXY GİRİŞİ
-        logging.info(f"🔗 TR Proxy üzerinden bağlanılıyor: {FIXED_PROXY}")
         opts.add_argument(f'--proxy-server={FIXED_PROXY}')
+        opts.add_argument(f'--user-agent={USER_AGENT}')
         
-        # Bot korumalarını aşmak için kimlik gizleme
+        # Cloudflare ve bot tespiti için ek kalkan
         opts.add_argument('--disable-blink-features=AutomationControlled')
-        opts.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
         
-        driver = uc.Chrome(options=opts, version_main=chrome_ver)
-        return driver
+        return uc.Chrome(options=opts, version_main=chrome_ver)
 
-# ---------------------------------------------------------
-# 4. SİTE ANALİZ MOTORU (Angular & media-player Uyumlu)
-# ---------------------------------------------------------
-class AnimeAnalyzer:
-    def __init__(self, driver):
-        self.driver = driver
-
-    def extract_direct_mp4(self, url):
+    def extract_source_url(self, url):
         try:
-            logging.info(f"🔍 Sayfaya sızılıyor: {url}")
+            logging.info(f"🔍 Bölüme giriliyor: {url}")
             self.driver.get(url)
             
-            # Angular (SPA) içeriğinin ve Proxy geçişinin oturması için sabırlı bekleme
+            # Proxy hızı ve Angular yükleme süresi için sabırlı bekleme
             time.sleep(20) 
             
             wait = WebDriverWait(self.driver, 45)
@@ -85,78 +77,68 @@ class AnimeAnalyzer:
             for card in cards:
                 try:
                     r_val = float(card.find_element(By.CLASS_NAME, "rating-value").text)
-                    if r_val > max_rating:
-                        max_rating, best_card = r_val, card
+                    if r_val > max_rating: max_rating, best_card = r_val, card
                 except: continue
 
             if best_card:
-                logging.info(f"🏆 Fansub Seçildi: {max_rating}. Video katmanı açılıyor...")
+                logging.info(f"🏆 Fansub Seçildi: {max_rating}. Player (Deep-Scan) taranıyor...")
                 self.driver.execute_script("arguments[0].click();", best_card)
-                
-                # ADIM 2: <media-player> İçindeki <source> Etiketini Bul
-                # Senin verdiğin HTML yapısına göre derin analiz yapıyoruz
-                time.sleep(15) # İçeriğin enjekte edilmesi için süre
-                
-                # Önce iframe'leri (kapsülleri) tara
-                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
-                logging.info(f"📦 {len(iframes)} adet iframe taramaya alınıyor...")
+                time.sleep(15) # Video tag'inin enjekte edilmesi için süre
 
+                # ADIM 2: Derin Iframe ve Shadow DOM Taraması
+                
+                iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
                 for frame in iframes:
                     try:
                         self.driver.switch_to.frame(frame)
-                        # Senin paylaştığın <source src="..."> yapısı
+                        # <source src="..."> etiketini ara
                         source_tag = self.driver.find_elements(By.TAG_NAME, "source")
                         if source_tag:
-                            video_link = source_tag[0].get_attribute("src")
-                            if video_link:
-                                logging.info(f"🎯 Mp4 Linki Yakalandı: {video_link[:60]}...")
-                                self.driver.switch_to.default_content()
-                                return video_link
+                            v_url = source_tag[0].get_attribute("src")
+                            self.driver.switch_to.default_content()
+                            return v_url
                         self.driver.switch_to.default_content()
                     except:
                         self.driver.switch_to.default_content()
                         continue
 
-                # Iframe dışında (ana DOM'da) ara
-                source_tag = self.driver.find_elements(By.CSS_SELECTOR, "media-player source")
-                if source_tag:
-                    return source_tag[0].get_attribute("src")
+                # Iframe dışında (ana sayfada) kontrol
+                direct_src = self.driver.find_elements(By.CSS_SELECTOR, "video source, media-player source")
+                if direct_src:
+                    return direct_src[0].get_attribute("src")
 
         except Exception as e:
-            logging.error(f"❌ Analiz Hatası: Element bulunamadı veya süre doldu. {e}")
+            logging.error(f"❌ Analiz Hatası: {e}")
         return None
 
-# ---------------------------------------------------------
-# 5. İNDİRME VE BULUT YÖNETİCİSİ (IDM Modu)
-# ---------------------------------------------------------
-class CloudManager:
-    def __init__(self):
-        self.api = HfApi()
-
-    def download_and_store(self, mp4_url, anime_name, ep):
-        filename = f"{anime_name}_B{ep}.mp4"
+    def secure_download(self, video_url, name, ep):
+        filename = f"{name}_B{ep}.mp4"
         
-        # yt-dlp ayarları: Tıpkı IDM gibi çoklu kanaldan ve hızlı çeker
+        # KRİTİK: Sunucu bağlantısının kopmasını engelleyen headers ve proxy ayarları
         ydl_opts = {
             'outtmpl': filename,
             'quiet': False,
             'proxy': FIXED_PROXY,
             'nocheckcertificate': True,
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'format': 'best', # Daha stabil indirme için 'best' formatı
             'headers': {
-                'Referer': 'https://animecix.tv/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-            }
+                'User-Agent': USER_AGENT,
+                'Referer': 'https://animecix.tv/', # Sunucu kimlik doğrulaması için şart
+                'Accept': '*/*',
+                'Connection': 'keep-alive',
+            },
+            'retries': 15, # Bağlantı koparsa 15 kez tekrar dene
+            'fragment_retries': 15,
         }
 
         try:
-            logging.info(f"🌪️ IDM Modu Aktif: {filename} indiriliyor...")
+            logging.info(f"🌪️ IDM Modu: Video sökülüyor -> {filename}")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([mp4_url])
+                ydl.download([video_url])
             
             if os.path.exists(filename):
-                # Hugging Face'e fırlat
-                hf_path = f"{anime_name}/{filename}"
+                # Hugging Face Aktarımı
+                hf_path = f"{name}/{filename}"
                 logging.info(f"📤 Bulut aktarımı başlatıldı: {hf_path}")
                 self.api.upload_file(
                     path_or_fileobj=filename,
@@ -166,48 +148,39 @@ class CloudManager:
                     token=HF_TOKEN
                 )
                 
-                # IPTV M3U Playlist Güncelleme
+                # IPTV M3U Kaydı
                 raw_url = f"https://huggingface.co/datasets/{REPO_ID}/resolve/main/{hf_path}"
-                m3u_file = f"{anime_name}_IPTV_List.m3u"
+                m3u_file = f"{name}_IPTV_Listen.m3u"
                 with open(m3u_file, "a", encoding="utf-8") as f:
                     if os.path.getsize(m3u_file) == 0: f.write("#EXTM3U\n")
-                    f.write(f"#EXTINF:-1, {anime_name} - Bolum {ep}\n{raw_url}\n")
+                    f.write(f"#EXTINF:-1, {name} - Bolum {ep}\n{raw_url}\n")
                 
-                os.remove(filename) # Diski temiz tut
-                logging.info(f"✅ Bölüm {ep} operasyonu başarıyla bitti!")
+                os.remove(filename) # Alan kazanmak için yereli temizle
+                logging.info(f"✅ Bölüm {ep} başarıyla arşive eklendi!")
         except Exception as e:
-            logging.error(f"💀 Medya İşleme Hatası: {e}")
+            logging.error(f"💀 Sunucu bağlantıyı reddetti veya kesti: {e}")
 
-# ---------------------------------------------------------
-# 6. ANA DÖNGÜ (Orkestratör)
-# ---------------------------------------------------------
-def run_all():
-    if not ANIME_URL:
-        logging.error("❗ URL eksik! GitHub Actions üzerinden link girdiğinden emin ol.")
-        return
+    def run(self):
+        if not ANIME_URL: return
+        # Klasör ismini URL'den temizle
+        try:
+            folder_name = ANIME_URL.split('/titles/')[1].split('/')[1].replace('-', '_').title()
+        except:
+            folder_name = "Arsiv"
 
-    # Klasör ismini URL'den otomatik temizleyerek al
-    try:
-        anime_folder = ANIME_URL.split('/titles/')[1].split('/')[1].replace('-', '_').title()
-    except:
-        anime_folder = "Genel_Arsiv"
+        for ep in range(START_EP, END_EP + 1):
+            logging.info(f"\n--- 🚀 OPERASYON: {folder_name} - BÖLÜM {ep} ---")
+            target_page = f"{ANIME_URL}{ep}"
+            video_link = self.extract_source_url(target_page)
+            
+            if video_link:
+                self.secure_download(video_link, folder_name, ep)
+                time.sleep(5) # Sunucuyu uyandırmamak için kısa bir mola
+            else:
+                logging.warning(f"⏩ Bölüm {ep} pas geçildi (Link sökülemedi).")
 
-    browser = StealthBrowser.initialize()
-    analyzer = AnimeAnalyzer(browser)
-    cloud = CloudManager()
-
-    for ep in range(START_EP, END_EP + 1):
-        target_page = f"{ANIME_URL}{ep}"
-        logging.info(f"\n--- 🎬 OPERASYON: BÖLÜM {ep} ---")
-        
-        video_link = analyzer.extract_direct_mp4(target_page)
-        if video_link:
-            cloud.download_and_store(video_link, anime_folder, ep)
-        else:
-            logging.warning(f"⏩ Bölüm {ep} atlanıyor: Kaynak linki sökülemedi.")
-
-    browser.quit()
-    logging.info("🎉 GÖREV TAMAMLANDI: IPTV listen ve arşivin hazır!")
+        self.driver.quit()
 
 if __name__ == "__main__":
-    run_all()
+    bot = AnimeBot()
+    bot.run()
