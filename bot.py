@@ -6,97 +6,129 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from huggingface_hub import HfApi
 
-# 1. LOGLAMA SİSTEMİ
+# ---------------------------------------------------------
+# 1. LOGLAMA SİSTEMİ (Sistemin Gözü Kulağı)
+# ---------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | [%(levelname)s] | %(message)s',
     handlers=[logging.StreamHandler()]
 )
 
-# 2. AYARLAR (GitHub Actions'tan Sinyalleri Alır)
+# ---------------------------------------------------------
+# 2. YAPILANDIRMA (Config)
+# ---------------------------------------------------------
+# Senin verdiğin özel bilgiler buraya işlendi
 HF_TOKEN = os.getenv("HF_TOKEN", "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")
 REPO_ID = "Enmpoy/allmoviesornimetr"
+FIXED_PROXY = "http://78.188.230.81:3310" # Senin verdiğin Türk Proxy'si
+
+# GitHub Actions'tan gelen komutlar
 ANIME_URL = os.getenv("ANIME_URL")
 START_EP = int(os.getenv("START_EP", 1))
 END_EP = int(os.getenv("END_EP", 1))
 
-class UltimateScraper:
-    def __init__(self):
-        logging.info("🕵️ Tarayıcı hazırlanıyor. Sürüm kontrolü aktif...")
-        self.driver = self._init_driver()
-        self.api = HfApi()
-
-    def _init_driver(self):
+# ---------------------------------------------------------
+# 3. HAYALET TARAYICI MODÜLÜ (Proxy ve Sürüm Uyumlu)
+# ---------------------------------------------------------
+class StealthBrowser:
+    @staticmethod
+    def initialize():
+        logging.info("🕵️ Tarayıcı hazırlanıyor. Proxy ve Sürüm kontrolü aktif...")
         chrome_ver = None
         try:
-            # Sistemdeki Chrome versiyonunu tespit et (Hataları önlemek için)
+            # Sistemdeki Chrome sürümünü tespit et (145/146 hatasını çözer)
             out = subprocess.check_output(['google-chrome', '--version']).decode('utf-8')
             chrome_ver = int(out.split()[2].split('.')[0])
+            logging.info(f"🌐 Sunucu Chrome Sürümü: {chrome_ver}")
         except: pass
 
-        options = uc.ChromeOptions()
-        options.add_argument('--headless') # Sunucuda ekran olmadığı için şart
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--window-size=1920,1080') # Angular elementlerinin görünmesi için HD boyut
-        options.add_argument('--disable-blink-features=AutomationControlled')
+        opts = uc.ChromeOptions()
+        opts.add_argument('--headless')
+        opts.add_argument('--no-sandbox')
+        opts.add_argument('--disable-dev-shm-usage')
+        opts.add_argument('--window-size=1920,1080')
         
-        # Gerçek kullanıcı kimliği
-        options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+        # PROXY ENJEKSİYONU
+        logging.info(f"🔗 Bağlantı Türk Proxy üzerinden geçiyor: {FIXED_PROXY}")
+        opts.add_argument(f'--proxy-server={FIXED_PROXY}')
         
-        return uc.Chrome(options=options, version_main=chrome_ver)
+        # İnsan taklidi ayarları
+        opts.add_argument('--disable-blink-features=AutomationControlled')
+        opts.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36')
+        
+        driver = uc.Chrome(options=opts, version_main=chrome_ver)
+        return driver
 
-    def solve_dynamic_page(self, url):
+# ---------------------------------------------------------
+# 4. SİTE ANALİZ MOTORU (Angular & SPA Uyumlu)
+# ---------------------------------------------------------
+class AnimeAnalyzer:
+    def __init__(self, driver):
+        self.driver = driver
+
+    def extract_source(self, url):
         try:
             logging.info(f"🔍 Analiz Ediliyor: {url}")
             self.driver.get(url)
             
-            # Sayfa bir Angular SPA olduğu için JS'nin çalışmasını bekliyoruz
-            time.sleep(15) 
+            # Proxy ve Angular (SPA) yapısı için geniş bekleme süresi 
+            time.sleep(20) 
             
-            # Kaydırma yaparak lazy-load bileşenlerini tetikle
+            # Sayfayı kaydırarak elementlerin tetiklenmesini sağla
             self.driver.execute_script("window.scrollTo(0, 600);")
             
-            # Çevirmen kartları gelene kadar maksimum 40 saniye sabret
-            wait = WebDriverWait(self.driver, 40)
+            wait = WebDriverWait(self.driver, 45)
+            logging.info("⏳ Çevirmen kartları bekleniyor...")
+            
+            # Elementin DOM'a düşmesini bekle
             wait.until(EC.presence_of_element_located((By.CLASS_NAME, "translator-card")))
             
             cards = self.driver.find_elements(By.CLASS_NAME, "translator-card")
             best_card, max_rating = None, -1.0
             
+            # En yüksek puanlı çevirmeni bul
             for card in cards:
                 try:
-                    rating_text = card.find_element(By.CLASS_NAME, "rating-value").text
-                    rating = float(rating_text)
-                    if rating > max_rating:
-                        max_rating, best_card = rating, card
+                    r_text = card.find_element(By.CLASS_NAME, "rating-value").text
+                    r_val = float(r_text)
+                    if r_val > max_rating:
+                        max_rating, best_card = r_val, card
                 except: continue
 
             if best_card:
-                logging.info(f"🏆 En yüksek puanlı çeviri seçildi: {max_rating}")
+                logging.info(f"🏆 En İyi Fansub Seçildi: {max_rating} Puan")
                 self.driver.execute_script("arguments[0].click();", best_card)
-                time.sleep(10) # Player iframe'inin gelmesi için bekle
+                time.sleep(10) # Player'ın enjekte olması için bekle
                 
-                # Iframe içinde video kaynağını tara
                 iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
                 for frame in iframes:
                     src = frame.get_attribute("src")
                     if src and any(d in src for d in ["vidmoly", "sibnet", "ok.ru", "player", "odnoklassniki"]):
                         return src
         except Exception as e:
-            logging.error(f"❌ Sayfa Analiz Hatası (Angular yüklenemedi): {e}")
+            logging.error(f"❌ Analiz Hatası: {str(e)[:100]}")
         return None
 
-    def process_episode(self, video_link, anime_name, ep):
+# ---------------------------------------------------------
+# 5. MEDYA İŞLEME VE BULUT AKTARIMI
+# ---------------------------------------------------------
+class MediaManager:
+    def __init__(self):
+        self.api = HfApi()
+
+    def handle_episode(self, video_link, anime_name, ep):
         filename = f"{anime_name}_Bolum_{ep}.mp4"
         ydl_opts = {
             'outtmpl': filename,
             'quiet': True,
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
+            'no_warnings': True,
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            'proxy': FIXED_PROXY # İndirme de proxy üzerinden geçsin
         }
         
         try:
-            logging.info(f"🌪️ İndirme Başladı: {filename}")
+            logging.info(f"🌪️ Bölüm {ep} indiriliyor...")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_link])
             
@@ -119,29 +151,40 @@ class UltimateScraper:
                     f.write(f"#EXTINF:-1, {anime_name} - Bolum {ep}\n{raw_url}\n")
                 
                 os.remove(filename) # Diski temizle
-                logging.info(f"✅ Bölüm {ep} başarıyla tamamlandı.")
+                logging.info(f"✅ Görev Başarıyla Tamamlandı!")
         except Exception as e:
-            logging.error(f"💀 Medya İşleme Hatası: {e}")
+            logging.error(f"💀 Medya Hatası: {e}")
 
-    def start(self):
-        if not ANIME_URL: return
-        # Anime adını URL'den çek (Örn: naruto)
-        try:
-            anime_folder = ANIME_URL.split('/')[-5].replace('-', '_').title()
-        except:
-            anime_folder = "Genel_Arsiv"
+# ---------------------------------------------------------
+# 6. ANA OPERASYON (Döngü)
+# ---------------------------------------------------------
+def start_bot():
+    if not ANIME_URL:
+        logging.error("❗ URL Bulunamadı! GitHub üzerinden link girdiğinden emin ol.")
+        return
 
-        for ep in range(START_EP, END_EP + 1):
-            target = f"{ANIME_URL}{ep}"
-            video_src = self.solve_dynamic_page(target)
-            
-            if video_src:
-                self.process_episode(video_src, anime_folder, ep)
-            else:
-                logging.warning(f"⏩ Bölüm {ep} atlanıyor: Kaynak bulunamadı.")
+    # Klasör adını temizle
+    try:
+        folder_name = ANIME_URL.split('/titles/')[1].split('/')[1].replace('-', '_').title()
+    except:
+        folder_name = "Anime_Arsiv"
+
+    browser = StealthBrowser.initialize()
+    analyzer = AnimeAnalyzer(browser)
+    manager = MediaManager()
+
+    for ep in range(START_EP, END_EP + 1):
+        target_page = f"{ANIME_URL}{ep}"
+        logging.info(f"\n--- BÖLÜM {ep} İŞLENİYOR ---")
         
-        self.driver.quit()
+        video_src = analyzer.extract_source(target_page)
+        if video_src:
+            manager.handle_episode(video_src, folder_name, ep)
+        else:
+            logging.warning(f"⏩ Bölüm {ep} atlanıyor: Kaynak bulunamadı.")
+
+    browser.quit()
+    logging.info("🎉 OPERASYON BİTTİ: Tüm bölümler Hugging Face'e taşındı.")
 
 if __name__ == "__main__":
-    bot = UltimateScraper()
-    bot.start()
+    start_bot()
