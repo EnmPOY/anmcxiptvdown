@@ -1,41 +1,41 @@
-name: "Anime Arşivleme ve IPTV Otomasyonu v5"
+name: "Anime Sniffer & Archiver"
 
 on:
   workflow_dispatch:
     inputs:
       anime_url:
-        description: 'URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
+        description: 'Bölüm URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
         required: true
       start_ep:
-        description: 'Başlangıç Bölümü'
+        description: 'Başlangıç'
         required: true
         default: '1'
       end_ep:
-        description: 'Bitiş Bölümü'
+        description: 'Bitiş'
         required: true
-        default: '12'
+        default: '5'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📂 Kodları Çek
+      - name: 📂 Checkout
         uses: actions/checkout@v4
 
-      - name: 🐍 Python 3.10 Hazırla
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Chrome'u Güncelle (Sürüm Hatası Çözücü)
+      - name: 🌐 Update Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: 🛠️ Kütüphaneleri Yükle
+      - name: 🛠️ Install Dependencies
         run: pip install -r requirements.txt
 
-      - name: 🎬 Botu Ateşle
+      - name: 🎬 Run Sniffer Bot
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANIME_URL: ${{ github.event.inputs.anime_url }}
