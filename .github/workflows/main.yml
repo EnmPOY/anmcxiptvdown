@@ -1,10 +1,10 @@
-name: "Enmxy Anime Arşivleme ve IPTV Sistemi"
+name: "Enmxy Anime Arşivleme Sistemi"
 
 on:
-  workflow_dispatch: # Manuel kontrol paneli
+  workflow_dispatch:
     inputs:
       anime_url:
-        description: 'Bölüm numarasından ÖNCEKİ link (Örn: https://animecix.tv/titles/7352/jujutsu-kaisen/season/1/episode/)'
+        description: 'Bölüm numarasından ÖNCEKİ link (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
         required: true
       start_ep:
         description: 'Başlangıç Bölümü'
@@ -13,32 +13,30 @@ on:
       end_ep:
         description: 'Bitiş Bölümü'
         required: true
-        default: '12'
+        default: '24'
 
 jobs:
-  anime_operasyonu:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📂 Dosyaları Klonla
+      - name: 📂 Checkout
         uses: actions/checkout@v4
 
-      - name: 🐍 Python 3.10 Kur
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Chrome ve Sürücü Güncelle (Sürüm Hatası Çözücü)
-        # 145 vs 146 kavgasını bitiren adım burası.
+      - name: 🌐 Update Chrome
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: 🛠️ Kütüphaneleri Yükle
+      - name: 🛠️ Install Deps
         run: |
-          python -m pip install --upgrade pip
-          pip install undetected-chromedriver huggingface_hub yt-dlp selenium requests webdriver-manager
+          pip install undetected-chromedriver huggingface_hub yt-dlp selenium webdriver-manager
 
-      - name: 🎬 Botu Başlat
+      - name: 🎬 Run Bot
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANIME_URL: ${{ github.event.inputs.anime_url }}
