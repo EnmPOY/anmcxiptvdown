@@ -1,0 +1,6 @@
+undetected-chromedriver
+huggingface_hub
+yt-dlp
+selenium
+requests
+webdriver-manager
