@@ -1,4 +1,4 @@
-import os, time, glob, logging
+import os, time, glob, logging, subprocess
 import yt_dlp
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -7,10 +7,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from huggingface_hub import HfApi
 
 # ---------------------------------------------------------
-# 1. LOGLAMA SİSTEMİ (Sistemin Gözü Kulağı)
+# 1. LOGLAMA SİSTEMİ
 # ---------------------------------------------------------
-# Terminale ve 'arsiv_sistemi.log' dosyasına her adımı yazar.
-# Böylece gece uyurken bot ne yapmış, sabah kalkıp okuyabilirsin.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | [%(levelname)s] | %(message)s',
@@ -18,52 +16,48 @@ logging.basicConfig(
 )
 
 # ---------------------------------------------------------
-# 2. YAPILANDIRMA MODÜLÜ (Kontrol Paneli)
+# 2. YAPILANDIRMA (Config)
 # ---------------------------------------------------------
 class Config:
-    HF_TOKEN = "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" # Hugging Face Anahtarın
-    REPO_ID = "Enmpoy/allmoviesornimetr" # Hedef Veritabanı
+    # GitHub Secrets'tan gelmezse buradakini kullanır (Güvenlik için Secrets önerilir)
+    HF_TOKEN = os.getenv("HF_TOKEN", "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")
+    REPO_ID = "Enmpoy/allmoviesornimetr"
     
-    # 🎯 VURULACAK HEDEFLER
-    # Buraya 50 tane anime ekle, sen okula git, o hepsini IPTV'ne çeksin.
+    # 🎯 HEDEF LİSTESİ (Buraya istediğin kadar ekleme yapabilirsin)
     TARGETS = [
-        {
-            "name": "Jujutsu_Kaisen", 
-            "base_url": "https://animecix.tv/titles/7352/jujutsu-kaisen/season/1/episode/", 
-            "start": 1, 
-            "end": 24
-        },
-        {
-            "name": "Naruto", 
-            "base_url": "https://animecix.tv/titles/80/naruto/season/1/episode/", 
-            "start": 1, 
-            "end": 220
-        },
-         {
-            "name": "Naruto-Shippuden", 
-            "base_url": "https://animecix.tv/titles/7490/naruto-shippuuden/season/1/episode/", 
-            "start": 1, 
-            "end": 500
-        },
-        # {"name": "Demon_Slayer", "base_url": "...", "start": 1, "end": 26}
+        {"name": "Jujutsu_Kaisen", "base_url": "https://animecix.tv/titles/7352/jujutsu-kaisen/season/1/episode/", "start": 1, "end": 24},
+        {"name": "Naruto", "base_url": "https://animecix.tv/titles/80/naruto/season/1/episode/", "start": 1, "end": 220},
+        {"name": "Naruto-Shippuden", "base_url": "https://animecix.tv/titles/7490/naruto-shippuuden/season/1/episode/", "start": 1, "end": 500}
     ]
 
 # ---------------------------------------------------------
-# 3. HAYALET TARAYICI MODÜLÜ
+# 3. HAYALET TARAYICI (Versiyon Hataları Çözülmüş)
 # ---------------------------------------------------------
 class StealthBrowser:
     @staticmethod
     def initialize():
-        logging.info("🕵️ Hayalet tarayıcı başlatılıyor (Cloudflare Kalkanı Devrede)...")
+        logging.info("🕵️ Hayalet tarayıcı sürüm kontrolü yapılıyor...")
+        
+        # --- KRİTİK DÜZELTME: Chrome Versiyonunu Tespit Et ---
+        chrome_main_version = None
+        try:
+            version_output = subprocess.check_output(['google-chrome', '--version']).decode('utf-8')
+            chrome_main_version = int(version_output.split()[2].split('.')[0])
+            logging.info(f"🌐 GitHub Sunucusundaki Chrome Sürümü: {chrome_main_version}")
+        except Exception as e:
+            logging.warning(f"⚠️ Sürüm tespit edilemedi, otomatik denenecek: {e}")
+
         opts = uc.ChromeOptions()
-        opts.add_argument('--headless') # Sunucuda görünmez çalışır
+        opts.add_argument('--headless') # Sunucuda ekran olmadığı için şart
         opts.add_argument('--no-sandbox')
-        opts.add_argument('--disable-dev-shm-usage') # RAM şişmesini engeller
+        opts.add_argument('--disable-dev-shm-usage')
         opts.add_argument('--mute-audio')
-        return uc.Chrome(options=opts)
+        
+        # Sürüm çakışmasını önlemek için version_main parametresini veriyoruz
+        return uc.Chrome(options=opts, version_main=chrome_main_version)
 
 # ---------------------------------------------------------
-# 4. SİTE PARÇALAYICI MODÜL (Kazıma Motoru)
+# 4. SİTE PARÇALAYICI (Zeki Seçim Sistemi)
 # ---------------------------------------------------------
 class SiteAnalyzer:
     def __init__(self, driver):
@@ -71,75 +65,74 @@ class SiteAnalyzer:
 
     def extract_premium_iframe(self, target_url):
         try:
+            logging.info(f"🔍 Sayfa analiz ediliyor: {target_url}")
             self.driver.get(target_url)
-            # Sayfanın tam yüklenmesini akıllıca bekle (15 saniyeye kadar)
-            WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "translator-card"))
-            )
+            
+            # Sayfanın ve fansub kartlarının gelmesini bekle
+            wait = WebDriverWait(self.driver, 20)
+            wait.until(EC.presence_of_element_located((By.CLASS_NAME, "translator-card")))
             
             cards = self.driver.find_elements(By.CLASS_NAME, "translator-card")
             best_card, max_rating = None, -1.0
             
-            # Kalite Taraması
+            # En yüksek puanlı olanı bulma döngüsü
             for card in cards:
                 try:
-                    r_val = float(card.find_element(By.CLASS_NAME, "rating-value").text)
+                    r_text = card.find_element(By.CLASS_NAME, "rating-value").text
+                    r_val = float(r_text)
                     if r_val > max_rating:
-                        max_rating = r_val
-                        best_card = card
+                        max_rating, best_card = r_val, card
                 except: continue
 
             if best_card:
-                logging.info(f"🏆 En yüksek puanlı çeviri seçiliyor: {max_rating}")
+                logging.info(f"🏆 Seçilen Fansub Puanı: {max_rating}")
                 self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", best_card)
                 time.sleep(1)
                 self.driver.execute_script("arguments[0].click();", best_card)
-                time.sleep(5) # Player iframe'inin DOM'a düşmesini bekle
+                time.sleep(7) # Player'ın yüklenmesi için geniş zaman
                 
-                # Iframe Avı
+                # Player iframe'ini bulma
                 for frame in self.driver.find_elements(By.TAG_NAME, "iframe"):
                     src = frame.get_attribute("src")
-                    if src and any(domain in src for domain in ["vidmoly", "sibnet", "ok.ru"]):
-                        logging.info(f"🔗 Kaynak başarıyla deşifre edildi: {src.split('/')[2]}")
+                    if src and any(d in src for d in ["vidmoly", "sibnet", "ok.ru", "player", "odnoklassniki"]):
                         return src
         except Exception as e:
-            logging.error(f"❌ Analiz sırasında hata: {str(e)[:50]}...")
+            logging.error(f"❌ Analiz Hatası: {str(e)[:100]}")
         return None
 
 # ---------------------------------------------------------
-# 5. İNDİRME MOTORU
+# 5. İNDİRME MOTORU (yt-dlp Gücü)
 # ---------------------------------------------------------
 class Downloader:
     @staticmethod
     def pull_video(iframe_url, anime_name, ep_num):
-        filename = f"{anime_name}_Bolum_{ep_num}.mp4"
+        filename = f"{anime_name}_B{ep_num}.mp4"
         ydl_opts = {
             'outtmpl': filename, 
             'quiet': True, 
-            'no_warnings': True, 
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best' # Kesinlikle en iyi kaliteyi zorla
+            'no_warnings': True,
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
         }
         try:
-            logging.info(f"🌪️ yt-dlp ile indirme başlatıldı: {filename}")
+            logging.info(f"🌪️ Video sökülüyor: {filename}")
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([iframe_url])
             return filename
         except Exception as e:
-            logging.error(f"💀 İndirme motoru çöktü: {e}")
+            logging.error(f"💀 İndirme Patladı: {e}")
             return None
 
 # ---------------------------------------------------------
-# 6. HUGGING FACE & IPTV (M3U) YÖNETİCİSİ
+# 6. BULUT VE LİSTE YÖNETİCİSİ
 # ---------------------------------------------------------
 class CloudAndPlaylistManager:
     def __init__(self):
         self.api = HfApi()
 
     def process_and_upload(self, local_file, anime_name, ep_num):
-        hf_path = f"{anime_name}/{local_file}" # Klasörleme sistemi
-        
+        hf_path = f"{anime_name}/{local_file}"
         try:
-            logging.info(f"📤 Hugging Face Veritabanına aktarılıyor: {hf_path}")
+            logging.info(f"📤 Hugging Face'e fırlatılıyor: {hf_path}")
             self.api.upload_file(
                 path_or_fileobj=local_file,
                 path_in_repo=hf_path,
@@ -147,26 +140,23 @@ class CloudAndPlaylistManager:
                 repo_type="dataset",
                 token=Config.HF_TOKEN
             )
-            os.remove(local_file) # Diski temiz tut
             
-            # Raw Link Oluşturma Formülü
+            # Linki hazırla ve M3U dosyasına bas
             raw_url = f"https://huggingface.co/datasets/{Config.REPO_ID}/resolve/main/{hf_path}"
-            m3u_file = f"{anime_name}_IPTV_Listesi.m3u"
+            m3u_file = f"{anime_name}_IPTV.m3u"
             
-            # M3U Formatında Yazma
             with open(m3u_file, "a", encoding="utf-8") as f:
-                if os.path.getsize(m3u_file) == 0:
-                    f.write("#EXTM3U\n")
-                f.write(f"#EXTINF:-1, {anime_name} - Bölüm {ep_num}\n")
-                f.write(f"{raw_url}\n")
-                
-            logging.info(f"✅ İşlem Tamam! {m3u_file} güncellendi.")
+                if os.path.getsize(m3u_file) == 0: f.write("#EXTM3U\n")
+                f.write(f"#EXTINF:-1, {anime_name} - Bölüm {ep_num}\n{raw_url}\n")
+            
+            os.remove(local_file) # İşlem bitince sil ki yer kaplamasın
+            logging.info(f"✅ Başarıyla tamamlandı: {ep_num}")
             
         except Exception as e:
-            logging.error(f"☁️ Bulut aktarımında hata: {e}")
+            logging.error(f"☁️ HF Yükleme Hatası: {e}")
 
 # ---------------------------------------------------------
-# 7. ANA ORKESTRATÖR (Ölümsüz Döngü)
+# 7. ORKESTRATÖR (Sistemin Kalbi)
 # ---------------------------------------------------------
 class Orchestrator:
     def run_forever(self):
@@ -175,43 +165,37 @@ class Orchestrator:
         while True:
             driver = None
             try:
-                logging.info("🚀 YENİ TARAMA DÖNGÜSÜ BAŞLIYOR...")
                 driver = StealthBrowser.initialize()
                 analyzer = SiteAnalyzer(driver)
                 
                 for target in Config.TARGETS:
                     name = target["name"]
+                    logging.info(f"📺 {name} Serisi Başlatılıyor...")
+                    
                     for ep in range(target["start"], target["end"] + 1):
                         url = f"{target['base_url']}{ep}"
-                        logging.info(f"\n[{name} | BÖLÜM {ep}]")
                         
                         iframe = analyzer.extract_premium_iframe(url)
-                        if not iframe: 
-                            logging.warning("⚠️ Kaynak yok, diğer bölüme geçiliyor.")
-                            continue
-                            
-                        Downloader.pull_video(iframe, name, ep)
+                        if not iframe: continue
                         
-                        # Esnek dosya bulucu (Uzun indirmelerde bazen .mkv inebilir)
-                        files = glob.glob(f"{name}_Bolum_{ep}.*")
+                        video_file = Downloader.pull_video(iframe, name, ep)
+                        
+                        # Dosya inmiş mi kontrol et (bazen yt-dlp uzantıyı değiştirebilir)
+                        files = glob.glob(f"{name}_B{ep}.*")
                         if files:
                             cloud_mgr.process_and_upload(files[0], name, ep)
                             
-                logging.info("💤 Görev listesi temizlendi. Kod 2 saat uyku moduna geçiyor.")
+                logging.info("💤 Liste bitti. 2 saat sonra tekrar kontrol edilecek.")
                 if driver: driver.quit()
-                time.sleep(7200) # 2 Saat bekle, yeni bölüm gelmiş mi diye tekrar bak
+                time.sleep(7200)
                 
             except Exception as e:
-                logging.critical(f"💥 SİSTEMSEL ÇÖKME TESPİT EDİLDİ: {e}")
-                logging.critical("🔄 Panik yok, bellek temizlenip 3 dakika içinde yeniden başlatılacak...")
+                logging.critical(f"💥 KRİTİK ÇÖKME: {e}")
                 if driver: 
                     try: driver.quit()
                     except: pass
-                time.sleep(180)
+                time.sleep(180) # 3 dakika bekle ve yeniden dene
 
-# ---------------------------------------------------------
-# ATEŞLEME
-# ---------------------------------------------------------
 if __name__ == "__main__":
     bot = Orchestrator()
     bot.run_forever()
