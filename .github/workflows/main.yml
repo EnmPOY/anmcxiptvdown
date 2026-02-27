@@ -1,10 +1,10 @@
-name: "Enmxy Ultimate Anime Archiver v4"
+name: "Anime Arşivleme ve IPTV Otomasyonu v5"
 
 on:
   workflow_dispatch:
     inputs:
       anime_url:
-        description: 'Bölüm numarasından ÖNCEKİ link (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
+        description: 'URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
         required: true
       start_ep:
         description: 'Başlangıç Bölümü'
@@ -13,21 +13,21 @@ on:
       end_ep:
         description: 'Bitiş Bölümü'
         required: true
-        default: '5'
+        default: '12'
 
 jobs:
-  operasyon:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📂 Kodları Klonla
+      - name: 📂 Kodları Çek
         uses: actions/checkout@v4
 
-      - name: 🐍 Python 3.10 Kur
+      - name: 🐍 Python 3.10 Hazırla
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Chrome'u Güncelle (Sürüm Hatası Engelleyici)
+      - name: 🌐 Chrome'u Güncelle (Sürüm Hatası Çözücü)
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
