@@ -1,0 +1,43 @@
+name: "Enmxy Anime Arşivleme Sistemi v3"
+
+on:
+  workflow_dispatch:
+    inputs:
+      anime_url:
+        description: 'Hedef Anime Linki (Bölümden önceki kısım)'
+        required: true
+      start_ep:
+        description: 'Kaçıncı bölümden başlasın?'
+        required: true
+        default: '1'
+      end_ep:
+        description: 'Hangi bölümde dursun?'
+        required: true
+        default: '24'
+
+jobs:
+  operasyon_baslasin:
+    runs-on: ubuntu-latest # GitHub'ın 7/24 çalışan kiralık katili
+    
+    steps:
+      - name: 📂 Depoyu Kontrol Et
+        uses: actions/checkout@v3
+
+      - name: 🐍 Python Canavarını Uyandır
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: 🛠️ Ağır Silahları Kuşan (Dependencies)
+        run: |
+          python -m pip install --upgrade pip
+          pip install undetected-chromedriver huggingface_hub yt-dlp selenium requests webdriver-manager
+
+      - name: 🎬 Operasyonu Ateşle
+        env:
+          # Gizli kasadaki token'ı ve senin verdiğin linkleri bota enjekte ediyoruz
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          ANIME_URL: ${{ github.event.inputs.anime_url }}
+          START_EP: ${{ github.event.inputs.start_ep }}
+          END_EP: ${{ github.event.inputs.end_ep }}
+        run: python bot.py
