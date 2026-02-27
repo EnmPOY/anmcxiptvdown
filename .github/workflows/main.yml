@@ -1,17 +1,17 @@
-name: "Anime Sniffer & Archiver"
+name: "Anime Sniffer & Archiver v6"
 
 on:
   workflow_dispatch:
     inputs:
       anime_url:
-        description: 'Bölüm URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
+        description: 'URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
         required: true
       start_ep:
-        description: 'Başlangıç'
+        description: 'Başlangıç Bölümü'
         required: true
         default: '1'
       end_ep:
-        description: 'Bitiş'
+        description: 'Bitiş Bölümü'
         required: true
         default: '5'
 
@@ -19,23 +19,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 📂 Checkout
+      - name: 📂 Kodları Çek
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Python 3.10 Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Update Chrome
+      - name: 🌐 Chrome'u Güncelle (Hata Engelleyici)
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: 🛠️ Install Dependencies
+      - name: 🛠️ Kütüphaneleri Yükle
         run: pip install -r requirements.txt
 
-      - name: 🎬 Run Sniffer Bot
+      - name: 🎬 Operasyonu Başlat
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANIME_URL: ${{ github.event.inputs.anime_url }}
