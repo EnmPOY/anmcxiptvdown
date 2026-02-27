@@ -1,8 +1,7 @@
-name: "Enmxy Anime Arşiv Sistemi V3"
+name: "Enmxy Anime Arşivleme ve IPTV Sistemi"
 
 on:
-  # Manuel olarak başlatmamızı sağlar
-  workflow_dispatch:
+  workflow_dispatch: # Manuel kontrol paneli
     inputs:
       anime_url:
         description: 'Bölüm numarasından ÖNCEKİ link (Örn: https://animecix.tv/titles/7352/jujutsu-kaisen/season/1/episode/)'
@@ -17,32 +16,30 @@ on:
         default: '12'
 
 jobs:
-  operasyon_baslasin:
-    runs-on: ubuntu-latest # GitHub'ın bize verdiği ücretsiz canavar makine
-    
+  anime_operasyonu:
+    runs-on: ubuntu-latest
     steps:
-      - name: 📂 Kodları Klonla
+      - name: 📂 Dosyaları Klonla
         uses: actions/checkout@v4
 
-      - name: 🐍 Python Ortamını Hazırla
+      - name: 🐍 Python 3.10 Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Chrome'u En Güncel Sürüme Zorla (HATA ÇÖZÜCÜ)
-        # Aldığın sürüm hatasını bu adım çözer. GitHub'daki Chrome'u en sona günceller.
+      - name: 🌐 Chrome ve Sürücü Güncelle (Sürüm Hatası Çözücü)
+        # 145 vs 146 kavgasını bitiren adım burası.
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: 🛠️ Gerekli Kütüphaneleri Kur
+      - name: 🛠️ Kütüphaneleri Yükle
         run: |
           python -m pip install --upgrade pip
           pip install undetected-chromedriver huggingface_hub yt-dlp selenium requests webdriver-manager
 
-      - name: 🎬 Botu Ateşle
+      - name: 🎬 Botu Başlat
         env:
-          # Gizli kasadaki token'ı ve senin yazdığın linkleri bota aktarıyoruz
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANIME_URL: ${{ github.event.inputs.anime_url }}
           START_EP: ${{ github.event.inputs.start_ep }}
