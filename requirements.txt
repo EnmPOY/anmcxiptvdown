@@ -1,7 +1,3 @@
-blinker==1.7.0
-selenium-wire
-undetected-chromedriver
-huggingface_hub
+playwright
 yt-dlp
-selenium
-webdriver-manager
+huggingface_hub
