@@ -1,10 +1,10 @@
-name: "Enmxy Anime Arşivleme Sistemi"
+name: "Enmxy Ultimate Anime Archiver v4"
 
 on:
   workflow_dispatch:
     inputs:
       anime_url:
-        description: 'URL (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
+        description: 'Bölüm numarasından ÖNCEKİ link (Örn: https://animecix.tv/titles/80/naruto/season/1/episode/)'
         required: true
       start_ep:
         description: 'Başlangıç Bölümü'
@@ -16,28 +16,26 @@ on:
         default: '5'
 
 jobs:
-  build:
+  operasyon:
     runs-on: ubuntu-latest
     steps:
-      - name: 📂 Kodları Çek
+      - name: 📂 Kodları Klonla
         uses: actions/checkout@v4
 
-      - name: 🐍 Python Kur
+      - name: 🐍 Python 3.10 Kur
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: 🌐 Chrome Sürümünü Güncelle
-        # Sürüm 145/146 hatasını bu adım çözer
+      - name: 🌐 Chrome'u Güncelle (Sürüm Hatası Engelleyici)
         run: |
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
       - name: 🛠️ Kütüphaneleri Yükle
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: 🎬 Operasyonu Başlat
+      - name: 🎬 Botu Ateşle
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           ANIME_URL: ${{ github.event.inputs.anime_url }}
