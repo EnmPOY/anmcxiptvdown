@@ -1,15 +1,13 @@
 name: Enmpoy 7/24 Ölüm Makinesi
 
-# Ne zaman tetiklenecek?
 on:
   schedule:
-    # Sistemi 4 saatte bir ateşler. Limitlere takılmadan aralıksız sömürür.
     - cron: "0 */4 * * *"
-  workflow_dispatch: # Actions sekmesinden "Run workflow" diyerek elle tetikleyebilmeni sağlar
+  workflow_dispatch: 
 
 jobs:
   anigexis_somurucu:
-    runs-on: ubuntu-latest # GitHub'ın beleş ve hızlı makinesine çöküyoruz
+    runs-on: ubuntu-latest 
 
     steps:
       - name: Depoyu Çek
@@ -20,11 +18,10 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Silahları ve Şarjörleri Yükle (Stealth Zırhı Dahil!)
+      - name: Silahları ve Şarjörleri Yükle (Saf Hız Modu)
         run: |
           python -m pip install --upgrade pip
-          # İŞTE KRİTİK NOKTA: playwright-stealth buraya eklendi, artık o amcık sunucu hata vermeyecek!
-          pip install playwright yt-dlp huggingface_hub playwright-stealth
+          pip install playwright yt-dlp huggingface_hub
           playwright install chromium --with-deps
 
       - name: Motoru Ateşle ve İçinden Geç!
